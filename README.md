@@ -24,7 +24,7 @@ Codes for paper *"Global vegetation responses to elevated CO2 vary across VPD th
      ```
   3. Load and preprocess the dataset:
      ```r
-     load("demo_data.RData")  # Runs data preprocessing
+     load("demo_data_monthly.RData")  # Runs data preprocessing
      ```
   4. Run the main analysis script:
     
