@@ -37,6 +37,11 @@ Codes for paper *"Global vegetation responses to elevated CO2 vary across VPD th
   - VPD sensitivity trend analysis
   - Visualizations
 
+- **Expected Run Time (Varies by Computer Specifications):**
+  - Data loading: ~30 seconds
+  - Model training: depending on CPU and RAM
+  - Visualization generation: ~10 seconds
+
 ## 3. Instructions for Use
 - **How to Run the Software on Your Data:**
   - Replace the dataset in `data/` directory with your own dataset (ensure it follows the expected format).
