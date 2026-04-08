@@ -3,125 +3,40 @@ library(raster)
 library(dplyr)
 
 ####load data
-setwd("/home/j_xiao/data/NCdemo")
-load("./data/demo_data_monthly.RData")
+load("suppl_data/data_monthly.RData")
 
-
+##base functions
+zscore <- function(data){
+  z_scores <- (data - mean(data, na.rm = TRUE)) / sd(data, na.rm = TRUE)
+  return(z_scores)
+}
 
 ##load threshold data
-ndvi_thres <- read.csv("/home/j_xiao/data/NCdemo/results/GIMMS_NDVI/NDVI_threshold2_h2o_gbm.csv")[-1,]
-ndvi_thres <- ndvi_thres$threshold
-ndvi_thres <- data.frame(thres=ndvi_thres)
-rownames(ndvi_thres) <- lonlat
+f_th <- raster("results_mr1/FLUXCOM_threshold2_masked.tif")
+g_th <- raster("results_mr1/GLASS_threshold2_masked.tif")
+m_th <- raster("results_mr1/MODIS_threshold2_masked.tif")
+f_th[f_th == 99] <- NA
+g_th[g_th == 99] <- NA
+m_th[m_th == 99] <- NA
 
-nirv_thres <- read.csv("/home/j_xiao/data/NCdemo/results/MODIS_NIRv/NIRv_threshold2_h2o_gbm.csv")[-1,]
-nirv_thres <- nirv_thres$threshold
-nirv_thres <- data.frame(thres=nirv_thres)
-rownames(nirv_thres) <- lonlat
+thres1 <- data.frame(threshold=as.numeric(as.matrix(f_th)))
+thres2 <- data.frame(threshold=as.numeric(as.matrix(g_th)))
+thres3 <- data.frame(threshold=as.numeric(as.matrix(m_th)))
 
-gpp_thres <- read.csv("/home/j_xiao/data/NCdemo/results/FLUXCOM_GPP/GPP_threshold2_h2o_gbm.csv")[-1,]
-gpp_thres <- gpp_thres$threshold
-gpp_thres <- data.frame(thres=gpp_thres)
-rownames(gpp_thres) <- lonlat
+rownames(thres1) <- lonlat
+rownames(thres2) <- lonlat
+rownames(thres3) <- lonlat
 
+#load monthly eCO2
+meco2 <- read.csv("results_mr1/MODIS_gpp_ppm_CO2_effect.csv",row.names = 1)
+meco2 <- as.matrix(meco2)
+meco2 <- meco2[,1:276]
 
+meco2 <- read.csv("results_mr1/GLASS_gpp_ppm_CO2_effect.csv",row.names = 1)
+meco2 <- as.matrix(meco2)
 
-##test case
-line <- "(80.75, 21.25)"
-X <- data.frame(par=mpar[line,],
-                pre=mpre[line,],
-                sm=msm[line,],
-                tmp=mtmp[line,])
-
-X.test <- matrix(0, 101, p)
-X.test[, 1] <- seq(-2, 2, length.out = 101)
-
-test.vpd <- mvpd[line,]
-test.vpdth <- ndvi_thres[line,]
-W <- ifelse(test.vpd < test.vpdth, 0, 1)
-
-Y <- zscore(meco2[line,])
-
-tau.forest <- causal_forest(X, Y, W)
-tau.forest
-#> GRF forest object of type causal_forest 
-#> Number of trees: 2000 
-#> Number of training samples: 2000 
-#> Variable importance: 
-#>     1     2     3     4     5     6     7     8     9    10 
-#> 0.691 0.032 0.040 0.048 0.030 0.029 0.032 0.030 0.029 0.041
-#> 
-tau.hat.oob <- predict(tau.forest)
-hist(tau.hat.oob$predictions)
-
-#Estimate treatment effects for the test sample
-tau.hat <- predict(tau.forest, X.test)
-plot(X.test[, 1], tau.hat$predictions, ylim = range(tau.hat$predictions, 0, 2), xlab = "x", ylab = "tau", type = "l")
-lines(X.test[, 1], pmax(0, X.test[, 1]), col = 2, lty = 2)
-
-#Estimate the conditional average treatment effect on the full sample (CATE)
-average_treatment_effect(tau.forest, target.sample = "all")
-#>   estimate    std.err 
-#> 0.36741777 0.04986737
-
-# Estimate the conditional average treatment effect on the treated sample (ATET).
-average_treatment_effect(tau.forest, target.sample = "treated")
-
-# Estimate the conditional average treatment effect on the treated sample (ATEC).
-average_treatment_effect(tau.forest, target.sample = "control")
-
-# Add confidence intervals for heterogeneous treatment effects; growing more trees is now recommended.
-tau.forest <- causal_forest(X, Y, W, num.trees = 4000)
-tau.hat <- predict(tau.forest, X.test, estimate.variance = TRUE)
-sigma.hat <- sqrt(tau.hat$variance.estimates)
-plot(X.test[, 1], tau.hat$predictions, ylim = range(tau.hat$predictions + 1.96 * sigma.hat, tau.hat$predictions - 1.96 * sigma.hat, 0, 2), xlab = "x", ylab = "tau", type = "l")
-lines(X.test[, 1], tau.hat$predictions + 1.96 * sigma.hat, col = 1, lty = 2)
-lines(X.test[, 1], tau.hat$predictions - 1.96 * sigma.hat, col = 1, lty = 2)
-lines(X.test[, 1], pmax(0, X.test[, 1]), col = 2, lty = 1)
-
-# In some examples, pre-fitting models for Y and W separately may
-# be helpful (e.g., if different models use different covariates).
-# In some applications, one may even want to get Y.hat and W.hat
-# using a completely different method (e.g., boosting).
-
-# Generate new data.
-n <- 4000
-p <- 20
-X <- matrix(rnorm(n * p), n, p)
-TAU <- 1 / (1 + exp(-X[, 3]))
-W <- rbinom(n, 1, 1 / (1 + exp(-X[, 1] - X[, 2])))
-Y <- pmax(X[, 2] + X[, 3], 0) + rowMeans(X[, 4:6]) / 2 + W * TAU + rnorm(n)
-
-forest.W <- regression_forest(X, W, tune.parameters = "all")
-W.hat <- predict(forest.W)$predictions
-
-forest.Y <- regression_forest(X, Y, tune.parameters = "all")
-Y.hat <- predict(forest.Y)$predictions
-
-forest.Y.varimp <- variable_importance(forest.Y)
-
-# Note: Forests may have a hard time when trained on very few variables
-# (e.g., ncol(X) = 1, 2, or 3). We recommend not being too aggressive
-# in selection.
-selected.vars <- which(forest.Y.varimp / mean(forest.Y.varimp) > 0.2)
-
-tau.forest <- causal_forest(X[, selected.vars], Y, W,
-                            W.hat = W.hat, Y.hat = Y.hat,
-                            tune.parameters = "all")
-
-tau.forest <- causal_forest(X, Y, W,
-                            W.hat = W.hat, Y.hat = Y.hat,
-                            tune.parameters = "all")
-
-# See if a causal forest succeeded in capturing heterogeneity by plotting
-# the TOC and calculating a 95% CI for the AUTOC.
-train <- sample(1:n, n / 2)
-train.forest <- causal_forest(X[train, ], Y[train], W[train])
-eval.forest <- causal_forest(X[-train, ], Y[-train], W[-train])
-rate <- rank_average_treatment_effect(eval.forest,
-                                      predict(train.forest, X[-train, ])$predictions)
-plot(rate)
-paste("AUTOC:", round(rate$estimate, 2), "+/", round(1.96 * rate$std.err, 2))
+meco2 <- read.csv("results_mr1/FLUXCOM_gpp_ppm_CO2_effect.csv",row.names = 1)
+meco2 <- as.matrix(meco2)
 
 
 ###build function
@@ -332,7 +247,7 @@ library(doSNOW)
 library(doRNG)
 library(parallel)
 
-cl <- makeCluster(8)
+cl <- makeCluster(4)
 registerDoSNOW(cl)
 registerDoRNG(seed = 123)
 
@@ -344,14 +259,14 @@ opts <- list(progress = progress)
 
 print(paste("Starting parellel processing at:", Sys.time()))
 ptime  <- system.time(
-  cf_result_ndvi <- foreach(
+  cf_result_fluxcom <- foreach(
     line = lonlat,
     .options.snow = opts,
 #   .errorhandling = "pass", 
     .combine = rbind,
     .packages = c('grf', 'dplyr')
   ) %dopar% {
-    cf_joy_track2(line,threshold=ndvi_thres)
+    cf_joy_track2(line,threshold=thres1)
   }
 )
 
@@ -361,22 +276,17 @@ print(paste("\n Parellel processing complete at:", Sys.time()))
 registerDoSEQ()
 stopCluster(cl)
 
-
-write.csv(cf_result_ndvi,"/home/j_xiao/data/NCdemo/results/causal_inference/NDVI_cf_result.csv")
-
-
 ####save data
-library(raster)
-as_array <- function(raster){
-  matrix <- matrix(NA,259200,nlayers(raster))
-  for(i in 1:nlayers(raster)){
-    matrix[,i] <-   as.numeric(as.matrix(subset(raster,i)))
-  }
-  lonlat <- read.csv("/home/j_xiao/data/NCdemo/line.csv")[,2]
-  rownames(matrix) <- lonlat
-  colnames(matrix) <- rep(NA,nlayers(raster))
-  return(matrix)
-}
+write.csv(cf_result_modis,"results_mr1/MODIS_cf_result.csv")
+write.csv(cf_result_glass,"results_mr1/GLASS_cf_result.csv")
+write.csv(cf_result_fluxcom,"results_mr1/FLUXCOM_cf_result.csv")
+
+
+########Plot
+library(ggplot2)
+library(ggthemes)
+library(reshape2)
+
 as_raster <- function(x){
   mat <- matrix(x,nrow=360,ncol=720)
   r <- raster(mat, xmn=-180,xmx=180,ymn=-90,ymx=90,crs=CRS("+proj=longlat +datum=WGS84 +no_defs"))
@@ -389,7 +299,6 @@ remove_except <- function(keep) {
   rm(list = to_remove, envir = .GlobalEnv)
   cat("Kept objects:", keep, "\n")
 }
-
 remove_outliers_df <- function(data, column) {
   
   Q1 <- quantile(data[[column]], 0.25, na.rm = TRUE)
@@ -422,153 +331,72 @@ remove_outliers <- function(data) {
   return(data)
 }
 
-cf_result_gpp <- read.csv("/home/j_xiao/data/NCdemo/results/causal_inference/GPP_cf_result.csv")[,-1]
-thres_mask <- raster("/home/j_xiao/data/NCdemo/results/FLUXCOM_GPP/vpd_threshold_masked.tif")
 
-ate_all <- remove_outliers(cf_result_gpp$ATE_all)
-ate_all <- as_raster(ate_all)
-ate_all <- mask(ate_all,thres_mask)
+ate_all_f <- as_raster(remove_outliers(cf_result_fluxcom$ATE_all))
+ate_all_g <- as_raster(remove_outliers(cf_result_glass$ATE_all))
+ate_all_m <- as_raster(remove_outliers(cf_result_modis$ATE_all))
 
-ate_control <- remove_outliers(cf_result_gpp$ATE_control)
-ate_control <- as_raster(ate_control)
-ate_control <- mask(ate_control,thres_mask)
+mean_data <- read.csv("suppl_data/data_multiyearmean.csv")
 
-ate_treat <- remove_outliers(cf_result_gpp$ATE_treat)
-ate_treat <- as_raster(ate_treat)
-ate_treat <- mask(ate_treat,thres_mask)
+df <- data.frame(tmp=mean_data$TMP,sm=mean_data$SM,map=mean_data$MAP,mi=mean_data$MI,vpd=mean_data$VPD,tp=mean_data$P,pet=mean_data$PET,par=mean_data$PAR,cn=mean_data$CNr,aet=mean_data$AET, ATE=remove_outliers(cf_result_fluxcom$ATE_all))
+df <- data.frame(tmp=mean_data$TMP,sm=mean_data$SM,map=mean_data$MAP,mi=mean_data$MI,vpd=mean_data$VPD,tp=mean_data$P,pet=mean_data$PET,par=mean_data$PAR,cn=mean_data$CNr,aet=mean_data$AET, ATE=remove_outliers(cf_result_glass$ATE_all))
+df <- data.frame(tmp=mean_data$TMP,sm=mean_data$SM,map=mean_data$MAP,mi=mean_data$MI,vpd=mean_data$VPD,tp=mean_data$P,pet=mean_data$PET,par=mean_data$PAR,cn=mean_data$CNr,aet=mean_data$AET, ATE=remove_outliers(cf_result_modis$ATE_all))
 
-plot(ate_treat)
+df <- na.omit(df)
+df <- round(df,2)
 
-writeRaster(ate_all,"/home/j_xiao/data/NCdemo/results/causal_inference/GPP_cf_ate_all_masked.tif",overwrite=TRUE)
-writeRaster(ate_control,"/home/j_xiao/data/NCdemo/results/causal_inference/GPP_cf_ate_control_masked.tif",overwrite=TRUE)
-writeRaster(ate_treat,"/home/j_xiao/data/NCdemo/results/causal_inference/GPP_cf_ate_treat_masked.tif",overwrite=TRUE)
-
-
-######
-cf_result_ndvi <- read.csv("/home/j_xiao/data/NCdemo/results/causal_inference/NDVI_cf_result.csv")[,-1]
-thres_mask <- raster("/home/j_xiao/data/NCdemo/results/GIMMS_NDVI/vpd_threshold_masked.tif")
-
-ate_all <- remove_outliers(cf_result_ndvi$ATE_all)
-ate_all <- as_raster(ate_all)
-ate_all <- mask(ate_all,thres_mask)
-
-ate_control <- remove_outliers(cf_result_ndvi$ATE_control)
-ate_control <- as_raster(ate_control)
-ate_control <- mask(ate_control,thres_mask)
-
-ate_treat <- remove_outliers(cf_result_ndvi$ATE_treat)
-ate_treat <- as_raster(ate_treat)
-ate_treat <- mask(ate_treat,thres_mask)
-
-plot(ate_all)
-plot(ate_treat)
-plot(ate_control)
-
-writeRaster(ate_all,"/home/j_xiao/data/NCdemo/results/causal_inference/ndvi_cf_ate_all_masked.tif",overwrite=TRUE)
-writeRaster(ate_control,"/home/j_xiao/data/NCdemo/results/causal_inference/ndvi_cf_ate_control_masked.tif",overwrite=TRUE)
-writeRaster(ate_treat,"/home/j_xiao/data/NCdemo/results/causal_inference/ndvi_cf_ate_treat_masked.tif",overwrite=TRUE)
+summary(df$ATE) 
+bins <- c(summary(df$ATE)["Min."], summary(df$ATE)["1st Qu."], 0 ,summary(df$ATE)["Max."])
+labels <- c('Strongly Negative', 'Moderately Negative', 'Positive')
+df$ATE_group <- cut(df$ATE, breaks = bins, labels = labels, include.lowest = TRUE)
+table(df$ATE_group)
 
 
-######
-cf_result_nirv <- read.csv("/home/j_xiao/data/NCdemo/results/causal_inference/NIRv_cf_result.csv")[,-1]
-thres_mask <- raster("/home/j_xiao/data/NCdemo/results/MODIS_NIRv/vpd_threshold_masked.tif")
+df_melted <- melt(df, id.vars = c("ATE_group"), 
+                          measure.vars = c("tmp", "sm", "map", "mi", "vpd", "tp", "pet", "par", "cn", "aet"))
+df_melted$value_adjusted <- ifelse(df_melted$variable == "tmp", pmax(pmin(df_melted$value, 30), 15),
+                                           ifelse(df_melted$variable == "sm", pmax(pmin(df_melted$value, 200), 0),
+                                                  ifelse(df_melted$variable == "map", pmax(pmin(df_melted$value, 2500), 0),
+                                                         ifelse(df_melted$variable == "mi", pmax(pmin(df_melted$value, 2), 0),
+                                                                ifelse(df_melted$variable == "vpd", pmax(pmin(df_melted$value, 2), 0.5),
+                                                                       ifelse(df_melted$variable == "tp", pmax(pmin(df_melted$value, 600), 0),
+                                                                              ifelse(df_melted$variable == "pet", pmax(pmin(df_melted$value, 5), 3),
+                                                                                     ifelse(df_melted$variable == "par", pmax(pmin(df_melted$value, 135), 115),
+                                                                                            ifelse(df_melted$variable == "cn", pmax(pmin(df_melted$value, 1.5), 0.75),
+                                                                                                   ifelse(df_melted$variable == "aet", pmax(pmin(df_melted$value, 100), 30),
+                                                                                                          df_melted$value))))))))))
+df_melted_f <- df_melted
+df_melted_g <- df_melted
+df_melted_m <- df_melted
 
-ate_all <- remove_outliers(cf_result_nirv$ATE_all)
-ate_all <- as_raster(ate_all)
-ate_all <- mask(ate_all,thres_mask)
+# conbined dataset plot
+combined_df <- dplyr::bind_rows(
+  dplyr::mutate(df_melted_f, dataset = "FLUXCOM GPP"),
+  dplyr::mutate(df_melted_g, dataset = "GLASS GPP"),
+  dplyr::mutate(df_melted_m, dataset = "MODIS GPP")
+)
+filtered_df <- combined_df %>%
+  filter(variable %in% c("tmp", "sm", "map", "vpd", "par", "aet"))
 
-ate_control <- remove_outliers(cf_result_nirv$ATE_control)
-ate_control <- as_raster(ate_control)
-ate_control <- mask(ate_control,thres_mask)
+filtered_df$variable <- toupper(filtered_df$variable )
+filtered_df$dataset <- factor(filtered_df$dataset, levels = c("FLUXCOM GPP","GLASS GPP","MODIS GPP"))
+filtered_df$variable <- factor(filtered_df$variable,levels = c("TMP","VPD","SM","MAP","AET","PAR") )
 
-ate_treat <- remove_outliers(cf_result_nirv$ATE_treat)
-ate_treat <- as_raster(ate_treat)
-ate_treat <- mask(ate_treat,thres_mask)
-
-plot(ate_all)
-plot(ate_treat)
-plot(ate_control)
-
-writeRaster(ate_all,"/home/j_xiao/data/NCdemo/results/causal_inference/nirv_cf_ate_all_masked.tif",overwrite=TRUE)
-writeRaster(ate_control,"/home/j_xiao/data/NCdemo/results/causal_inference/nirv_cf_ate_control_masked.tif",overwrite=TRUE)
-writeRaster(ate_treat,"/home/j_xiao/data/NCdemo/results/causal_inference/nirv_cf_ate_treat_masked.tif",overwrite=TRUE)
-
-
-####Plot
-library(raster)
-library(ggplot2)
-library(ggthemes)
-library(dplyr)
-#GPP
-ate_all <- raster("/home/j_xiao/data/NCdemo/results/causal_inference/GPP_cf_ate_all_masked.tif")
-ate_control <- raster("/home/j_xiao/data/NCdemo/results/causal_inference/GPP_cf_ate_control_masked.tif")
-ate_treat <- raster("/home/j_xiao/data/NCdemo/results/causal_inference/GPP_cf_ate_treat_masked.tif")
-
-#NDVI
-ate_all <- raster("/home/j_xiao/data/NCdemo/results/causal_inference/NDVI_cf_ate_all_masked.tif")
-ate_control <- raster("/home/j_xiao/data/NCdemo/results/causal_inference/NDVI_cf_ate_control_masked.tif")
-ate_treat <- raster("/home/j_xiao/data/NCdemo/results/causal_inference/NDVI_cf_ate_treat_masked.tif")
-
-#NIRv
-ate_all <- raster("/home/j_xiao/data/NCdemo/results/causal_inference/NIRv_cf_ate_all_masked.tif")
-ate_control <- raster("/home/j_xiao/data/NCdemo/results/causal_inference/NIRv_cf_ate_control_masked.tif")
-ate_treat <- raster("/home/j_xiao/data/NCdemo/results/causal_inference/NIRv_cf_ate_treat_masked.tif")
-
-
-
-
-
-df <- data.frame(ATE=as.numeric(as_array(ate_all)),
-                 ATEC=as.numeric(as_array(ate_control)),
-                 ATET=as.numeric(as_array(ate_treat)))
-
-
-data <- tidyr::pivot_longer(df, 
-                            cols = everything(),  
-                            names_to = "Category", 
-                            values_to = "Value")   
-
-p1 <- 
-  ggplot(data,aes(x=Category,y=Value,fill=Category)) +
-  geom_boxplot(width=0.5,size=0.4,alpha=1,outlier.alpha = 0.25)+
-  geom_hline(yintercept = 0,linetype = "dashed",size=0.3)+
-  scale_fill_manual(values=c("#B8001F","#FCFAEE","#507687"))+
-  theme_few()+
-  theme(legend.position = "none")+
-  ylab("Estimate")+
-  xlab(element_blank())
-
-ggsave("/home/j_xiao/data/NCdemo/results/causal_inference/GPP_ate_allcontreat.pdf",p1, width = 4,height = 5, dpi=300)
-ggsave("/home/j_xiao/data/NCdemo/results/causal_inference/NDVI_ate_allcontreat.pdf",p1, width = 4,height = 5, dpi=300)
-ggsave("/home/j_xiao/data/NCdemo/results/causal_inference/NIRv_ate_allcontreat.pdf",p1, width = 4,height = 5, dpi=300)
-
-
-summary_data <- na.omit(data) %>%
-  group_by(Category) %>%
-  summarize(
-    mean_Value = mean(Value),
-    ci_lower = mean(Value) - qt(0.975, df=n()-1) * sd(Value) / sqrt(n()),  
-    ci_upper = mean(Value) + qt(0.975, df=n()-1) * sd(Value) / sqrt(n())   
+#Fig.4
+p <- ggplot(filtered_df, aes(x = ATE_group, y = value_adjusted, fill = dataset)) +
+  geom_boxplot(outlier.shape = NA, coef = 0) +
+  facet_wrap(~ variable, scales = "free_y", ncol = 3) +  # Facet by environmental variables
+  scale_fill_manual(values = c("FLUXCOM GPP" = "#FF7750", "GLASS GPP" = "#BDE4F4", "MODIS GPP" = "#284B63")) +
+  theme_classic() +
+  theme(
+    axis.text.x = element_text(angle = 90, hjust = 1),
+    strip.text = element_text(size = 8),
+    legend.position = "top"  # Place the legend at the top
+  ) +
+  labs(
+    y = "Value",
+    x = NULL,
+    fill = "Products",
   )
 
-
-fill_colors <- c("#B8001F", "black", "#507687")
-
-
-p2 <- 
-  ggplot(summary_data, aes(x=Category, y=mean_Value,color=Category)) +
-  geom_point(size=5) +      
-  geom_linerange(aes(ymin=ci_lower, ymax=ci_upper), 
-                 size=1) +  
-  scale_color_manual(values=fill_colors) +
-  theme_few()+
-  theme(legend.position = "none")+
-  ylab("Estimate")+
-  xlab(element_blank())
-
-ggsave("/home/j_xiao/data/NCdemo/results/causal_inference/GPP_ate_mean_allcontreat.pdf",p2, width = 3,height = 5, dpi=300)
-ggsave("/home/j_xiao/data/NCdemo/results/causal_inference/NDVI_ate_mean_allcontreat.pdf",p2, width = 3,height = 5, dpi=300)
-ggsave("/home/j_xiao/data/NCdemo/results/causal_inference/NIRv_ate_mean_allcontreat.pdf",p2, width = 3,height = 5, dpi=300)
-
-
-
+ggsave("plots/ATE_cf_combined_data_facet.pdf",p, width = 10,height = 8, dpi=300)

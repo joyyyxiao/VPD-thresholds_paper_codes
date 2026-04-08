@@ -2,65 +2,86 @@
 
 Codes for paper *"Global vegetation responses to elevated CO2 vary across VPD thresholds"*
 
+---
+
 ## 1. System Requirements
-- **Software Dependencies & Operating Systems:**
-  - R
-  - RStudio (optional, recommended)
-  - Required main R packages:
-    - `ggplot2` (for visualization)
-    - `grf` (for causal analysis)
-    - `h2o` (for machine learning)
-- **Versions the codes Has Been Tested On:**
-  - R 4.4.2
-- **Required Non-Standard Hardware:**
-  - No specialized hardware required. Code runs on any standard desktop/laptop.
 
-## 2. Demo
-- **Instructions to Run on Data:**
-  1. Open `R` or `RStudio`.
-  2. Set the working directory where your code and data are located:
-     ```r
-     setwd("/path/to/your/project")
-     ```
-  3. Load and preprocess the dataset:
-     ```r
-     load("demo_data_monthly.RData")  # Runs data preprocessing
-     ```
-  4. Run the main analysis script:
-    
-- **Expected Output:**
-  - Estimated eCO2 effects on NIRv
-  - ML models outputs
-  - VPD thresholds
-  - Estimated Average Treatment Effects (ATE)
-  - VPD sensitivity
-  - VPD sensitivity trend analysis
-  - Visualizations
+* **Software Dependencies & Operating Systems:**
 
-- **Expected Run Time (Varies by Computer Specifications):**
-  - Data loading: ~30 seconds
-  - Model training: depending on CPU and RAM
-  - Visualization generation: ~10 seconds
+  * R (≥ 4.4.2)
+  * RStudio (recommended)
+  * Required R packages:
 
-## 3. Instructions for Use
-- **How to Run the Software on Your Data:**
-  - Replace the dataset in `data/` directory with your own dataset (ensure it follows the expected format).
-  - Update paths in the scripts if needed.
-  - Run the scripts in sequence:
+    * `ggplot2` (visualization)
+    * `grf` (causal analysis)
+    * `h2o` (machine learning)
+    * `doParallel` (optional, for parallel computing)
 
-- **(OPTIONAL) Reproduction Instructions:**
-  - If you wish to reproduce the exact results in the manuscript, use the provided dataset `demo_data` and execute the steps above without modifications.
-  - For ensuring reproducibility, we recommend setting a random seed:
-    ```r
-    set.seed(1234)
-    ```
-  - If using parallel computing, ensure you have `doParallel` installed and specify the number of cores:
-    ```r
-    library(doParallel)
-    cl <- makeCluster(detectCores() - 1)  
-    registerDoParallel(cl)
-    ```
+* **Tested Environment:**
+
+  * R 4.4.2 on Windows/macOS/Linux
+
+* **Hardware Requirements:**
+
+  * No specialized hardware required. Runs on standard desktop/laptop.
 
 ---
 
-**We encourage you to include instructions for reproducing all the quantitative results in the manuscript.**
+## 2. Project Structure
+
+This repository is organized as follows:
+
+* `*.Rproj` — RStudio project file (recommended entry point)
+* `*.R` — analysis scripts
+
+Using the `.Rproj` file ensures all paths are handled **relative to the project root**, avoiding the need for absolute paths.
+
+---
+
+## 3. Demo
+
+### How to Run
+
+1. **Open the project**
+
+   * Double-click the `.Rproj` file
+   * Or open it via RStudio (`File → Open Project`)
+
+2. **Load and preprocess data**
+
+   ```r
+   load("suppl_data/data_monthly.RData")
+   ```
+
+3. **Run the main analysis scripts**
+   (run scripts in order, e.g.)
+
+---
+
+### Expected Output
+
+* Estimated eCO2 effects
+* Machine learning model outputs
+* VPD thresholds
+* Estimated Average Treatment Effects (ATE)
+* VPD sensitivity
+* VPD sensitivity trend analysis
+* Visualizations
+
+---
+
+### Expected Run Time
+
+* Data loading: ~30 seconds
+* Model training: depends on CPU and RAM
+* Visualization: ~10 seconds
+
+
+---
+
+## Notes
+
+* All paths are relative to the project root
+
+---
+
